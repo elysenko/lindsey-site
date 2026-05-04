@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>The LeBarre Group — Crisis Communications & Strategy</title>
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="The LeBarre Group — Crisis Communications & Strategy. Preparation that performs.">
+  <meta name="theme-color" content="#2A1D11">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Non-blocking font loading -->
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" onload="this.rel='stylesheet'">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap"></noscript>
+  <script>
+    // Global error handler
+    window.onerror = function(msg, url, line, col, error) {
+      var el = document.getElementById('app-error');
+      if (el) el.textContent = 'Error: ' + msg;
+      return false;
+    };
+    window.addEventListener('unhandledrejection', function(event) {
+      var el = document.getElementById('app-error');
+      if (el) el.textContent = 'Promise rejection: ' + event.reason;
+    });
+    // Mark Angular as ready immediately since we're waiting for DOMContentLoaded
+    window.__angularReady = false;
+  </script>
+</head>
+<body>
+  <app-root>
+    <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#2A1D11;color:#F5F1EB;font-family:Inter,system-ui,sans-serif;gap:24px;padding:32px;">
+      <img src="lebarre-logo.jpg" alt="The LeBarre Group - Crisis Communications & Strategy" style="max-width:300px;height:auto;object-fit:contain;" width="1080" height="1080">
+      <div style="font-size:14px;opacity:0.7;">Loading&hellip;</div>
+      <div id="app-error" style="color:#f88;font-size:12px;max-width:80%;text-align:center;"></div>
+    </div>
+  </app-root>
+</body>
+</html>

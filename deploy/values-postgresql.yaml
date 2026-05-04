@@ -1,0 +1,23 @@
+# deploy/values-postgresql.yaml
+# Bitnami PostgreSQL Helm chart values for the LeBarre Group marketing site.
+# Deploy with:
+#   helm repo add bitnami https://charts.bitnami.com/bitnami
+#   helm upgrade --install lebarre-group-postgresql bitnami/postgresql \
+#     -f deploy/values-postgresql.yaml -n colossus-apps \
+#     --set auth.postgresPassword=<generated-secret>
+
+auth:
+  postgresPassword: ""         # set via --set auth.postgresPassword=<secret>
+  database: lebarre_group_db
+
+primary:
+  persistence:
+    size: 5Gi
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

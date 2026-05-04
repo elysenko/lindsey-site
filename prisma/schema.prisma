@@ -1,0 +1,361 @@
+// LeBarre Group — Phase 1 marketing website schema
+// Models cover: admin auth, marketing content, lead capture / brand brief
+// workflow, audit trails, rate limiting, and SMTP retry queue.
+
+generator client {
+  provider = "prisma-client-js"
+  // Point the generator at the backend's node_modules so the NestJS app
+  // sees full type definitions. Required because the schema lives at the
+  // repo root but the only Node consumer is `backend/`.
+  output   = "../backend/node_modules/.prisma/client"
+}
+
+generator pothos {
+  provider = "prisma-pothos-types"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+//  Enums
+// =============================================================================
+
+enum UserRole {
+  ADMIN
+  EDITOR
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  CLOSED
+}
+
+enum BriefStatus {
+  PENDING
+  COMPLETED
+}
+
+enum SiteFaqCategory {
+  CRISIS
+  REPUTATION
+  AI
+  WORKING_WITH
+}
+
+enum ChallengeCategory {
+  ACTIVE_CRISIS
+  PROACTIVE_REPUTATION
+  CAMPAIGN_LAUNCH
+  STAKEHOLDER_COMMS
+  BRAND_REFRESH
+  ONGOING_STRATEGY
+  OTHER
+}
+
+enum InsightsPostStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum EmailQueueStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// =============================================================================
+//  Authentication & admin users
+// =============================================================================
+
+model User {
+  id                String     @id @default(cuid())
+  email             String     @unique
+  passwordHash      String
+  role              UserRole   @default(ADMIN)
+  failedLoginCount  Int        @default(0)
+  lockUntil         DateTime?
+  lastLoginAt       DateTime?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  // Relations
+  authoredNotes     LeadNote[]
+  briefAudits       BrandBriefAudit[] @relation("BriefAuditAuthor")
+
+  @@index([email])
+  @@map("users")
+}
+
+// =============================================================================
+//  Team / About — public profile pages with schema.org/Person data
+// =============================================================================
+
+model TeamMember {
+  id                 String         @id @default(cuid())
+  slug               String         @unique
+  fullName           String
+  title              String
+  honorificPrefix    String?
+  // JSON arrays — credentials e.g. ["APR", "PRSA"], certifications likewise.
+  credentials        Json           @default("[]")
+  certifications     Json           @default("[]")
+  bio                String         @db.Text
+  expertise          Json           @default("[]")
+  education          Json           @default("[]")
+  skills             Json           @default("[]")
+  headshotUrl        String?
+  linkedinUrl        String?
+  professionalLinks  Json           @default("[]")
+  displayOrder       Int            @default(0)
+  isActive           Boolean        @default(true)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  // Relations
+  authoredPosts      InsightsPost[] @relation("InsightsAuthor")
+
+  @@index([slug])
+  @@map("team_members")
+}
+
+// =============================================================================
+//  Services & service-page FAQs
+// =============================================================================
+
+model Service {
+  id              String       @id @default(cuid())
+  slug            String       @unique
+  name            String
+  shortDescription String      @db.Text
+  longDescription String       @db.Text
+  keyOutcomes     Json         @default("[]") // string[] of bullet outcomes
+  displayOrder    Int          @default(0)
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  // Relations
+  faqs            ServiceFaq[]
+  leads           Lead[]
+
+  @@index([slug])
+  @@map("services")
+}
+
+model ServiceFaq {
+  id           String   @id @default(cuid())
+  serviceId    String
+  question     String   @db.Text
+  answer       String   @db.Text
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  service      Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId])
+  @@map("service_faqs")
+}
+
+// =============================================================================
+//  Site-wide FAQ page
+// =============================================================================
+
+model SiteFaq {
+  id           String          @id @default(cuid())
+  category     SiteFaqCategory
+  question     String          @db.Text
+  answer       String          @db.Text
+  displayOrder Int             @default(0)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([category, displayOrder])
+  @@map("site_faqs")
+}
+
+// =============================================================================
+//  Lead capture, Brand Intelligence Brief, audit trail, internal notes
+// =============================================================================
+
+model Lead {
+  id                    String              @id @default(cuid())
+  briefToken            String              @unique
+  fullName              String
+  organization          String
+  email                 String
+  phone                 String?
+  primaryServiceId      String?
+  challengeCategories   ChallengeCategory[]
+  situationDescription  String              @db.Text
+  leadStatus            LeadStatus          @default(NEW)
+  briefStatus           BriefStatus         @default(PENDING)
+  submittedIp           String?
+  userAgent             String?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  // Relations
+  primaryService        Service?            @relation(fields: [primaryServiceId], references: [id], onDelete: SetNull, map: "leads_primary_service_fk")
+  brandBrief            BrandBrief?
+  notes                 LeadNote[]
+
+  @@index([briefToken])
+  @@index([leadStatus])
+  @@index([briefStatus])
+  @@index([createdAt])
+  @@map("leads")
+}
+
+model BrandBrief {
+  id                  String             @id @default(cuid())
+  leadId              String             @unique
+  missionStatement    String?            @db.Text
+  visionStatement     String?            @db.Text
+  differentiator      String?            @db.Text
+  brandStory          String?            @db.Text
+  audiences           String?            @db.Text
+  voiceDescriptors    String?            @db.Text
+  successDefinition   String?            @db.Text
+  submittedAt         DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  lead                Lead               @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  audits              BrandBriefAudit[]
+
+  @@map("brand_briefs")
+}
+
+model BrandBriefAudit {
+  id              String      @id @default(cuid())
+  brandBriefId    String
+  fieldName       String
+  previousValue   String?     @db.Text
+  newValue        String?     @db.Text
+  editedByUserId  String
+  editedAt        DateTime    @default(now())
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  brandBrief      BrandBrief  @relation(fields: [brandBriefId], references: [id], onDelete: Cascade)
+  editedBy        User        @relation("BriefAuditAuthor", fields: [editedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([brandBriefId])
+  @@index([editedByUserId])
+  @@index([editedAt])
+  @@map("brand_brief_audits")
+}
+
+model LeadNote {
+  id            String   @id @default(cuid())
+  leadId        String
+  authorUserId  String
+  body          String   @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  lead          Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  author        User     @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
+
+  @@index([leadId])
+  @@index([authorUserId])
+  @@map("lead_notes")
+}
+
+// =============================================================================
+//  Insights — long-form articles
+// =============================================================================
+
+model InsightsPost {
+  id                  String              @id @default(cuid())
+  slug                String              @unique
+  title               String
+  excerpt             String              @db.Text
+  body                String              @db.Text
+  heroImageUrl        String?
+  authorTeamMemberId  String
+  status              InsightsPostStatus  @default(DRAFT)
+  publishedAt         DateTime?
+  lastUpdatedAt       DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  author              TeamMember          @relation("InsightsAuthor", fields: [authorTeamMemberId], references: [id], onDelete: Restrict)
+
+  @@index([slug])
+  @@index([status, publishedAt])
+  @@index([authorTeamMemberId])
+  @@map("insights_posts")
+}
+
+// =============================================================================
+//  Rate limiting & email queue
+// =============================================================================
+
+model RateLimitEvent {
+  id          String   @id @default(cuid())
+  ip          String
+  endpoint    String
+  email       String?  // optional — used for per-email admin login throttling
+  occurredAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([ip, endpoint, occurredAt])
+  @@index([email, endpoint, occurredAt])
+  @@map("rate_limit_events")
+}
+
+model EmailQueue {
+  id          String           @id @default(cuid())
+  recipient   String
+  subject     String
+  body        String           @db.Text
+  status      EmailQueueStatus @default(PENDING)
+  retries     Int              @default(0)
+  lastError   String?          @db.Text
+  sentAt      DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([status, createdAt])
+  @@map("email_queue")
+}
+
+// =============================================================================
+//  Social proof — homepage testimonials & client logos
+// =============================================================================
+
+model Testimonial {
+  id            String   @id @default(cuid())
+  quote         String   @db.Text
+  attribution   String   // e.g. "Jane Doe, CEO of Acme"
+  organization  String?
+  isFeatured    Boolean  @default(false)
+  displayOrder  Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([isFeatured, displayOrder])
+  @@map("testimonials")
+}
+
+model ClientLogo {
+  id            String   @id @default(cuid())
+  clientName    String
+  logoUrl       String
+  altText       String?
+  displayOrder  Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([displayOrder])
+  @@map("client_logos")
+}
